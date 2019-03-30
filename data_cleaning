@@ -1,1 +1,76 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
 
+
+```{r}
+#library(png)
+library(jpeg, quietly = TRUE)
+library(grid)
+directory <- "C:/Users/stule/OneDrive/Documents/Fourth Yr Academics/Spring 2019/STOR 565/Finalproject/boat-types-recognition/freight boat/dock-ship-container-port-boat-vessel-sea-1277744.jpg"
+freight_test <- readJPEG(directory)
+freight_plot <- as.raster(freight_test)
+grid.raster(freight_plot) #have to put in cmd line to get it to show up, shows up in pdf though
+```
+
+```{r}
+#pixel intensities
+freight_red_only <- freight_test[, , 1] 
+pr_output <- prcomp(freight_red_only, center = TRUE, scale = TRUE) #important to scale.
+```
+sdev = stdev of X explained by each PC 
+rotation = matrix whose columns contain PC loadings for each PC
+center = pre-adjusted mean of each variable
+scale = pre-adjusted stdev of each variable
+x = matrix whose (i,j)th entry is the jth PC score of observation i. These are PC's. 
+```{r}
+#pr_output$rotation weird since no predictors; dealing with images
+dim(pr_output$rotation)
+hist(freight_red_only)
+#so its 1280 rows, 1029 columns. 
+#this is a histogram of the pixel intensities
+
+#could also take an "average" of the pixel intensities here if we liked. Using red was an 
+#arbitrary choice in the in-class example
+```
+
+Scree plots
+```{r}
+pr_variation <- pr_output$sdev^2 
+pve <- pr_variation / sum(pr_variation) 
+par(mfrow = c(1,2)) 
+plot(pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained")
+plot(cumsum(pve), xlab = "Principal Component", ylab = "Cumulative Proportion of Variance Explained", ylim = c(0, 1), type = "b", xlim = c(1, 100)) 
+abline(0.9,0)
+#looks like we need about 70 PC's to explain 90% of the variation in this image. i.e. 90 pve
+```
+
+Selection of d principal components /
+Projecting onto a lower dimensional space using d loading vectors
+```{r}
+W <- pr_output$rotation #the loading matrix 
+pc_image <- list() 
+num_pcs <- c(1, 5, 10, 20, 50, 70, 80, 100, 200) #scale the original image 
+Image <- scale(freight_red_only) 
+
+for(j in 1:length(num_pcs)) { 
+  u_proj <- W 
+  #we will only use the first num.pcs PC loadings so set the remaining to 0 
+  u_proj[, (num_pcs[j] + 1) : 505] <- 0 
+  #Make the projection 
+  projection <- (Image%*%u_proj)%*%t(u_proj) 
+  #to draw an image, values need to be between 0 and 1 
+  scaled <- (projection - min(as.numeric(projection))) 
+  scaled <- scaled / max(as.numeric(scaled)) 
+  pc_image[[j]] <- as.raster(scaled) 
+} 
+
+#plot each of the images 
+par(mfrow = c(3,3), mar = c(0,0,3,0)) 
+for (i in 1:9) { #compute the cumulative proportion of variation explained; this will become our title. 
+  cum_pve = sum(pve[1:num_pcs[i]])*100
+  plot(pc_image[[i]]) 
+  title(cum_pve) 
+}
+```
