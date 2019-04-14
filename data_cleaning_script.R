@@ -1,5 +1,7 @@
 ################### ML Project: Data setup ##########################
 
+### This takes Joe's code and creates a dataset for pixels. I've added some code to consolidate PC-loadings
+
 ### Installing EBImage from BioConductor:
 if (!requireNamespace("BiocManager", quietly = TRUE)){
   install.packages("BiocManager")}
