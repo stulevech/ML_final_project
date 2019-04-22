@@ -1,0 +1,121 @@
+setwd("C:/Users/stule/OneDrive/Documents/Fourth Yr Academics/Spring 2019/STOR 565/Finalproject/boat-types-recognition")
+
+### PCA ###
+library(dplyr)
+library(readr)
+boats_pixels = read_csv('boats_pixels_blue.csv')
+
+set.seed(2)
+#Remove class labels prior to PCA
+boats_labels = boats_pixels$type
+boats_pixels = boats_pixels %>% select(-type)
+pca.out = prcomp(boats_pixels, scale = T )
+
+
+
+#Add boat type class labels back as "class"
+#Keep 40 PC loadings
+pca.result = data.frame(class = boats_labels, pca.out$x[,1:40])
+
+#Separate into 80% train, 20% validate
+train_ids <- sample((1:nrow(pca.result)), size = floor(.80*nrow(pca.result)))
+train = pca.result[train_ids,]
+validate = pca.result[-train_ids,]
+
+### KNN ###
+
+library(MASS) 
+library(mvtnorm) 
+library(class)
+library(dplyr)
+
+
+five_fold_cv <- function(data) {
+  set.seed(2)
+  
+  class_errors <- data.frame("k" = NA, "average error" = NA)
+  
+  random_data <- data[sample(nrow(data)),]
+  splitted <- split(random_data, c(1,2,3,4,5))
+  
+  for (i in 1:100) {
+    #let k range from 1 to 100
+    total_error <- 0
+    
+    for (j in 5:1) {
+      test <- splitted[[j]]
+      train <- random_data %>% anti_join(test)
+      train_predictors <- dplyr::select(train, -matches("class"))
+      test_predictors <- dplyr::select(test, -matches("class"))
+      knn_result <- knn(train_predictors, test_predictors, cl = train$class, k = i)
+      
+      for (k in 1: length(knn_result)) {
+        if (knn_result[k] != test$class[k]) {
+          total_error <- total_error + 1
+        }
+      }
+    }
+    
+    class_errors[i, ] = c(i, total_error/5)
+  }
+  return(class_errors)
+} 
+
+(result <- five_fold_cv(train))
+best <- result[which.min(result[,2]),1]
+#Need to set seed within function
+#Best K = 17
+
+knn_func <- function() {
+  
+  id_data <- mutate(train, id = row.names(train)) 
+  knn_train_predictors <- dplyr::select(train, -matches("class"))
+  knn_test_predictors <- dplyr::select(validate, -matches("class"))
+  
+  knn_k <- knn(knn_train_predictors, knn_test_predictors, 
+               cl = train$class, k = best)
+  
+  return((sum(knn_k != validate$class))/nrow(validate))
+  #divide by 120 as that is the size of the validation set
+}
+
+knn_func()
+#returns between a 46.67% error rate, or 53.33% accuracy
+#additional tuning parameters?
+#k highly dependent on seed set; others were 30, 36, 42
+
+
+
+#verify normality
+par(mfrow = c(4,5))
+for (i in 2:21) {
+     hist(pca.result[,i], main = '')
+}
+for (i in 22:41) {
+  hist(pca.result[,i], main = '')
+}
+#looks good! for LDA, QDA
+
+
+### LDA ###
+
+#assumption of normality of PC scores 
+#across each PC component is satisfied
+
+lda_mod <- lda(class~., data = train)
+lda_pred <- predict(lda_mod, validate, type = "response")$class
+lda_error_rate <- (sum(lda_pred != validate$class))/nrow(validate)
+lda_error_rate
+#is the assumption that the data is normally distributed valid for LDA/QDA?
+#56.67% error rate
+
+### QDA ###
+
+#assumption of normality of PC scores 
+#across each PC component is satisfied
+
+qda_mod <- qda(class~., data = train)
+qda_pred <- predict(qda_mod, validate, type = "response")$class
+qda_error_rate <- (sum(qda_pred != validate$class))/nrow(validate)
+qda_error_rate
+#57.5% error rate
